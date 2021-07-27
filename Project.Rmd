@@ -1,0 +1,237 @@
+---
+title: Practical Machine Learning Project
+output: html_document
+---
+
+# Summary
+
+Human Activity Recognition (HAR) are wearable devices that can be used to measure a range of variables of movement performed by the user. For this work, various users performed a range of activities while wearing sensors on the waist, upper arm, lower arm, waist and on a dumbell being used.
+
+A data set of 19,622 entries is analysed for this work. Each entry corresponds to one of five activities which is specified in the data. The aim of this work is to train a machine learning model accurate enough to predict what type of activity a user is performing in a test data set of 20 entries where activity type is not specified.
+
+Initially, a CART model was trained without cross-validation or tuning to provide a poor accuracy model). Cross-validation and tuning was then implemented, resulting in a final CART model accuracy of 92.3%. Gradient Boosing Method (GBM) and Random Forest models were also trained and were found to have an accuracy of 96.2% and 99.5% respectively. These latter two methods were found to be more expensive in compuational resources, however.
+
+Each method performed at a 90% (RPART), 100% (GBM) and 100% (RF) accuracy on the 20 test cases. Dues to its improved accuracy and comparatively lower computing cost, the GBM method is deemed most suitable for this application.
+
+# Importing and Cleaning Data
+
+Initially, the 19,622 training cases and 20 test cases were loaded into R. The raw data describes 160 variables.
+
+```{r}
+training <- read.csv("pml-training.csv")
+testing <- read.csv("pml-testing.csv")
+```
+
+The variable on which the data is modelled, classe, describes the type of activity being performed as A, B, C, D or E. As this work needs to predict which category of activity each entry corresponds to, it it appropriate to convert the classe variable to a categorical factor.
+
+```{r}
+## change class to factor
+training$classe <- as.factor(training$classe)
+```
+
+The data set features a significant proportion of variables without an entry, or more specifically a string variable with one space, ie. " ". The entire data set was searched to find instances of these entries and where present, were changed to NA for further processing.
+
+```{r, warning=FALSE}
+library(dplyr)
+
+test <- training[1,12]
+
+training.mod <- training
+
+## Convert empty entries to NA's
+
+for(i in 1:nrow(training.mod)) {
+        for(j in 1:ncol(training.mod)) {
+                if(!is.na(training.mod[i,j])) {
+                         if(training.mod[i,j] == test) {
+                                training.mod[i,j] <- NA
+                         }
+                }
+        }
+}
+
+```
+In variables where empty values are present, and concurrently, NA entries, they appear to dominate. Among all the entries with NA values, NA's were found in at least 97.9% of observations. For this reason, these variables were found to be redundant and were excluded from modelling.
+
+``` {r, warning = FALSE}
+## Check proportion of NA's for a given variable
+
+na.proportion <- colSums(is.na(training.mod))/nrow(training.mod)
+
+na.proportion.positive <- na.proportion[na.proportion > 0]
+
+no.nas <- na.proportion[na.proportion == 0]
+
+keep <- names(no.nas)
+
+trimmed <- training.mod %>%
+        select(keep)
+```
+
+The first seven variables in the data set also relate to non-movement specific data and were deemed suitable for exclusion.
+
+```{r}
+## Exclude first 7 rows that have useless data
+names(trimmed[,1:7])
+refined <- trimmed[,8:60]
+```
+The final, tidy data set included 53 variables down from 160. This includes 52 numerical variables relating to movement measurements, and one classe variable describing the type of movement being undertaken.
+
+# Partitioning and Modelling the Data
+
+The training data was partitioned into sub-groups based on a 90% prevalence for training and 10% for testing 
+
+```{r, warning=FALSE}
+## split into training and testing sets
+library(caret)
+
+set.seed(123)
+trainIndex <- createDataPartition(refined$classe, p = 0.9, list = FALSE)
+sub.training <- refined[trainIndex,]
+sub.testing <- refined[-trainIndex,]
+```
+In order to reduce the time to generate each model, parallel computing was used based on three parallel cores. 
+
+```{r, warning=FALSE}
+library(parallel)
+library(doParallel)
+cores <- makeCluster(detectCores() - 1)
+registerDoParallel(cores)
+```
+The initial modeling approach was to use a Classification and Regression Tree (CART) model with no cross-validation and no tuning.
+
+```{r}
+system.time(model <- train(classe~.,
+                           data = sub.training,
+                           method = "rpart"))
+
+predict.model <- predict(model, newdata = sub.testing)
+
+confusionMatrix(sub.testing$classe, predict.model)
+```
+This initial model provides and overall accuracy of 49.6% percent. While this is better than guesswork (20%), development and refinement of the model yields more accurate results. The same model is implemented again, but with cross-validation included.
+
+```{r}
+ctrl <- trainControl(method = "cv", 
+                     number = 10,
+                     allowParallel = TRUE)
+
+system.time(model2 <- train(classe~.,
+                           data = sub.training,
+                           method = "rpart",
+                           trControl = ctrl))
+
+predict.model2 <- predict(model2, newdata = sub.testing)
+
+confusionMatrix(sub.testing$classe, predict.model2)
+```
+The inclusion of cross-validation does not increase the accuracy of the model,  but is included for best practice.
+
+The model is then tuned by modifying the tunelength from its default setting of 3 through to 100 
+
+```{r warning=FALSE}
+library(rattle)
+
+ctrl <- trainControl(method = "cv", 
+                     number = 10,
+                     allowParallel = TRUE)
+
+accuracy <- data.frame()
+
+for (i in 3:100) {
+        
+        model.rpart <- train(classe~., 
+                          data = sub.training, 
+                          method = "rpart",
+                          trControl = ctrl,
+                          tuneLength = i)
+        
+        predict.rpart <- predict(model.rpart, newdata = sub.testing)
+        
+        accuracy[i-2,1] <- i
+        accuracy[i-2,2] <- confusionMatrix(sub.testing$classe, predict.rpart)$overall[1]
+                }
+
+names(accuracy) <- c("tuneLength", "Accuracy")
+plot(accuracy, type = "p", pch = 21)
+lines(accuracy)
+```
+
+The graph shows how the model accuracy increases with an increase in tuneLength. This reaches as assymptote at a tuneLength of 80, at which the accuracy does not rise above 94.0%. While this level of accuracy may be suitable for some applications, other models may yield improved results.
+
+The method below uses Stochastic Gradient Boosting with no tuning and achieves an accuracy of 96%.
+
+```{r}
+system.time(model.gbm <- train(classe~., 
+                  data = sub.training, 
+                  method = "gbm",
+                  trControl = ctrl))
+
+predict.gbm <- predict(model.gbm, newdata = sub.testing)
+
+confusionMatrix(sub.testing$classe, predict.gbm)
+
+```
+
+The method below uses a Random Forest method with no tuning and achieves an accuracy of 99%.
+
+```{r}
+system.time(model.rf <- train(classe~., 
+                  data = sub.training,
+                  method = "rf",
+                  trControl = ctrl))
+
+predict.rf <- predict(model.rf, newdata = sub.testing)
+
+confusionMatrix(sub.testing$classe, predict.rf)
+```
+
+```{r warning=FALSE}
+stopCluster(cores)
+registerDoSEQ()
+```
+
+```{r}
+actual <- c("B","A","B","A","A","E","D","B","A","A","B","C","B","A","E","E","A",
+            "B","B","B")
+rpart <- predict(model.rpart, testing)
+gbm <- predict(model.gbm, testing)
+rf <- predict(model.rf, testing)
+
+case <- seq(1,20) 
+
+comparison <- cbind(case, actual, rpart, gbm, rf)
+
+for (i in 1:20) {
+        for(j in 3:5) {
+                
+                if(comparison[i,j] == "1") {
+                        comparison[i,j] <- "A"
+                } 
+                if(comparison[i,j] == "2") {
+                        comparison[i,j] <- "B"
+                }
+                if(comparison[i,j] == "3") {
+                        comparison[i,j] <- "C"
+                }
+                if(comparison[i,j] == "4") {
+                        comparison[i,j] <- "D"
+                }
+                if(comparison[i,j] == "5") {
+                        comparison[i,j] <- "E"
+                }
+        }
+}
+               
+
+comparison
+```
+
+The GBM and RF methods achieve 100% accuracy on the 20 test cases compared to 90% for the RPART method. If the required model accuracy is to perfectly predict the activity type for these 20 cases, then only the GBM and RF models can be considered appropriate. 
+
+In terms of computational cost, it took 964 seconds to generate the RF model and 372 seconds to generate the GBM model. Alternatively, the GBM method uses 38.6% of the computational time of the RF method and so may be said to be more efficient overall.
+
+It took 0.366 seconds for the RF model to correctly predict all 20 test cases, while the GBM model only needed 0.1 seconds. This makes the GBM method more computationally more efficient and potentially more suitable to real-time classification applications.
+
+For these reasons, the GBM method is the model of choice as a result of this report.
+
