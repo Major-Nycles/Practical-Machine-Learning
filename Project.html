@@ -441,7 +441,7 @@ registerDoParallel(cores)</code></pre>
                            data = sub.training,
                            method = &quot;rpart&quot;))</code></pre>
 <pre><code>##    user  system elapsed 
-##   9.994   0.226  41.318</code></pre>
+##   9.272   0.190  30.496</code></pre>
 <pre class="r"><code>predict.model &lt;- predict(model, newdata = sub.testing)
 
 confusionMatrix(sub.testing$classe, predict.model)</code></pre>
@@ -478,7 +478,7 @@ confusionMatrix(sub.testing$classe, predict.model)</code></pre>
 ## Detection Prevalence   0.2847   0.1934  0.17449   0.1638  0.18367
 ## Balanced Accuracy      0.7118   0.6936  0.60992       NA  0.94424</code></pre>
 <p>This initial model provides and overall accuracy of 49.6% percent. While this is better than guesswork (20%), development and refinement of the model yields more accurate results. The same model is implemented again, but with cross-validation included.</p>
-<pre class="r"><code>ctrl &lt;- trainControl(method = &quot;cv&quot;, 
+<pre class="r"><code>ctrl &lt;- trainControl(method = &quot;repeatedcv&quot;, 
                      number = 10,
                      allowParallel = TRUE)
 
@@ -487,7 +487,7 @@ system.time(model2 &lt;- train(classe~.,
                            method = &quot;rpart&quot;,
                            trControl = ctrl))</code></pre>
 <pre><code>##    user  system elapsed 
-##   9.553   0.211  15.660</code></pre>
+##   9.073   0.199  12.966</code></pre>
 <pre class="r"><code>predict.model2 &lt;- predict(model2, newdata = sub.testing)
 
 confusionMatrix(sub.testing$classe, predict.model2)</code></pre>
@@ -581,7 +581,7 @@ lines(accuracy)</code></pre>
 ##    140        0.1940             nan     0.1000    0.0017
 ##    150        0.1802             nan     0.1000    0.0015</code></pre>
 <pre><code>##    user  system elapsed 
-##  38.377   0.262 427.360</code></pre>
+##  40.153   0.472 349.476</code></pre>
 <pre class="r"><code>predict.gbm &lt;- predict(model.gbm, newdata = sub.testing)
 
 confusionMatrix(sub.testing$classe, predict.gbm)</code></pre>
@@ -623,7 +623,7 @@ confusionMatrix(sub.testing$classe, predict.gbm)</code></pre>
                   method = &quot;rf&quot;,
                   trControl = ctrl))</code></pre>
 <pre><code>##     user   system  elapsed 
-##   87.996    1.517 1348.145</code></pre>
+##   84.195    1.899 1181.778</code></pre>
 <pre class="r"><code>predict.rf &lt;- predict(model.rf, newdata = sub.testing)
 
 confusionMatrix(sub.testing$classe, predict.rf)</code></pre>
@@ -719,6 +719,15 @@ comparison</code></pre>
 <p>In terms of computational cost, it took 964 seconds to generate the RF model and 372 seconds to generate the GBM model. Alternatively, the GBM method uses 38.6% of the computational time of the RF method and so may be said to be more efficient overall.</p>
 <p>It took 0.366 seconds for the RF model to correctly predict all 20 test cases, while the GBM model only needed 0.1 seconds. This makes the GBM method more computationally more efficient and potentially more suitable to real-time classification applications.</p>
 <p>For these reasons, the GBM method is the model of choice as a result of this report.</p>
+</div>
+<div id="out-of-sample-error" class="section level1">
+<h1>Out of Sample Error</h1>
+<p>For the chosen method, the out of sample error is:</p>
+<pre class="r"><code>OSA &lt;-1 - confusionMatrix(sub.testing$classe, predict.gbm)$overall[1]
+
+OSA</code></pre>
+<pre><code>##   Accuracy 
+## 0.03265306</code></pre>
 </div>
 
 
