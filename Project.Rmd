@@ -112,7 +112,7 @@ confusionMatrix(sub.testing$classe, predict.model)
 This initial model provides and overall accuracy of 49.6% percent. While this is better than guesswork (20%), development and refinement of the model yields more accurate results. The same model is implemented again, but with cross-validation included.
 
 ```{r}
-ctrl <- trainControl(method = "cv", 
+ctrl <- trainControl(method = "repeatedcv", 
                      number = 10,
                      allowParallel = TRUE)
 
@@ -234,4 +234,14 @@ In terms of computational cost, it took 964 seconds to generate the RF model and
 It took 0.366 seconds for the RF model to correctly predict all 20 test cases, while the GBM model only needed 0.1 seconds. This makes the GBM method more computationally more efficient and potentially more suitable to real-time classification applications.
 
 For these reasons, the GBM method is the model of choice as a result of this report.
+
+# Out of Sample Error
+
+For the chosen method, the out of sample error is:
+
+```{r}
+OSA <-1 - confusionMatrix(sub.testing$classe, predict.gbm)$overall[1]
+
+OSA
+```
 
